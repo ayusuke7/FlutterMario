@@ -1,5 +1,5 @@
-import 'package:flutter_platform_game/globals.dart';
-import 'package:flutter_platform_game/hitbox.dart';
+import 'package:flutter_platform_game/common/globals.dart';
+import 'package:flutter_platform_game/utils/hitbox.dart';
 
 class Bullet extends HitBox {
 

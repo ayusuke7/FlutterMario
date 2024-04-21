@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_platform_game/game_board.dart';
+import 'package:flutter_platform_game/game_loader.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+
   const MyApp({super.key});
 
   // This widget is the root of your application.
@@ -17,8 +18,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
       ),
-      home: const GameBoard(),
+      home: const GameLoader(),
     );
   }
 }
-

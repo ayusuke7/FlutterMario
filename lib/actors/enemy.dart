@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_platform_game/globals.dart';
-import 'package:flutter_platform_game/hitbox.dart';
-import 'package:flutter_platform_game/platforms.dart';
-import 'package:flutter_platform_game/player.dart';
+import 'package:flutter_platform_game/common/globals.dart';
+import 'package:flutter_platform_game/utils/hitbox.dart';
+import 'package:flutter_platform_game/actors/platforms.dart';
+import 'package:flutter_platform_game/actors/player.dart';
 
 enum EnemyType { turtle, spike } 
 
@@ -38,15 +38,17 @@ class Enemy extends HitBox {
 
     /* set spritesheet */
     switch(type) {
-        case EnemyType.turtle:
-          sprites = Globals.turtleRun;
-          break;
-        case EnemyType.spike:
-          sprites = Globals.spikeRun;
-          break;
-        default: 
-          break;
-      }
+      case EnemyType.turtle:
+        sprites = Globals.turtleRun;
+        sprite = Globals.turtleRun.first;
+        break;
+      case EnemyType.spike:
+        sprites = Globals.spikeRun;
+        sprite = Globals.spikeRun.first;
+        break;
+      default: 
+        break;
+    }
   }
 
   void update(int time, Size screen) {
@@ -67,16 +69,16 @@ class Enemy extends HitBox {
   void _move() {
     var v = dir == Dir.left ? -1 : 1;    
     x += velocity.x * v;
-    if (dir == Dir.right && right >= distance.x + distance.width) {
-      dir = Dir.left;
-    } else
-    if (dir == Dir.left && left <= distance.x) {
-      dir = Dir.right;
+    if (
+      (dir == Dir.right && right >= distance.x + distance.width) ||
+      (dir == Dir.left && left <= distance.x)
+    ) {
+      changeDir();
     }
   }
 
   void _updateSprites(int time) {
-    if (sprites.isNotEmpty && x % 20 == 0) {
+    if (sprites.isNotEmpty && time % 20 == 0) {
       var second = time ~/ 20;
       var pos = second % sprites.length;
       sprite = sprites[pos];
@@ -92,10 +94,6 @@ class Enemy extends HitBox {
     
   }
 
-  void changeDir() {
-    dir = dir == Dir.left ? Dir.right : Dir.left;
-  }
-
   void checkColisionWithPlayer(Player player) {
     if (collideWith(player)) {
       var colision = collideWithSide(player);
@@ -106,16 +104,9 @@ class Enemy extends HitBox {
         damage(true);
       } else {
         /* player damage on colision left or right */
-        player.damage();    
-        if (colision.left) {
-          changeDir();
-        } else
-        if (colision.right) {
-          changeDir();
-          if (player.left > 0) {
-            player.jumpDamage();
-          }
-        }
+        player.damage();
+        player.jumpDamage();
+        changeDir();
       }
 
     }
@@ -125,16 +116,26 @@ class Enemy extends HitBox {
     for (var platform in platforms) {
       if (collideWith(platform)) {
         var colision = collideWithSide(platform);
-
         if (colision.top) {
           velocity.y = 0;
         }
-
+        
         if (colision.left || colision.right) {
           changeDir();
         }
       }
     }
+  }
+
+  factory Enemy.copy(Enemy enemy) {
+    return Enemy(
+      x: enemy.x,
+      y: enemy.y,
+      width: enemy.width,
+      height: enemy.height,
+      type: enemy.type,
+      distance: enemy.distance,
+    );
   }
 
 }

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_platform_game/bullet.dart';
-import 'package:flutter_platform_game/enemy.dart';
-import 'package:flutter_platform_game/globals.dart';
-import 'package:flutter_platform_game/hitbox.dart';
-import 'package:flutter_platform_game/keys_map.dart';
-import 'package:flutter_platform_game/platforms.dart';
-import 'package:flutter_platform_game/powerup.dart';
+import 'package:flutter_platform_game/actors/bullet.dart';
+import 'package:flutter_platform_game/actors/enemy.dart';
+import 'package:flutter_platform_game/common/globals.dart';
+import 'package:flutter_platform_game/utils/hitbox.dart';
+import 'package:flutter_platform_game/utils/keys_map.dart';
+import 'package:flutter_platform_game/actors/platforms.dart';
+import 'package:flutter_platform_game/actors/powerup.dart';
 
 enum Status { walking, running, jumping, firing, idle, die }
 
@@ -18,7 +18,8 @@ class Player extends HitBox {
   bool blocked = false;
   bool power = false;
 
-  int life = 10;
+  int coins = 0;
+  int life = 1;
 
   double speed = 4.0;
   List<Bullet> bullets = [];
@@ -26,13 +27,14 @@ class Player extends HitBox {
   Player({
     super.x = 0,
     super.y = 0,
-    super.width = 42,
-    super.height = 64,
+    super.width = 32,
+    super.height = 42,
   });
 
   bool get die => life == 0;
 
   void update(int time, Size screen, double offset, double maxOffset) {
+
     x += velocity.x;
     y += velocity.y;
 
@@ -44,9 +46,9 @@ class Player extends HitBox {
       life = 0;
     }
     
-    _move(screen, offset, maxOffset);
     _updateSprite(time);
     _updateBullets(screen);
+    _move(screen, offset, maxOffset);
 
   }
 
@@ -66,16 +68,21 @@ class Player extends HitBox {
       status = Status.running;
     } else {
       velocity.x = 0;
-      status = Status.idle;
+      
+      if (!keys.right && !keys.left) {
+        status = Status.idle;
+      }
     }
   }
 
   void _updateSprite(int time) {
+   
     // tick 100 ms == 1s
-    if (time % 20 != 0) return;
+    if (time % 10 != 0) return;
 
     /* sprite update per 1/2 second */
-    var second = time ~/ 20;
+    var second = time ~/ 10;
+
     if (status == Status.running) {
       var pos = second % Globals.marioRun.length;
       sprite = Globals.marioRun[pos];
@@ -106,10 +113,34 @@ class Player extends HitBox {
     });
   }
 
+  void _updateSize() {
+    if (life > 1) {
+      width = 42;
+      height = 64;
+      y = y - 64;
+    } else {
+      width = 32;
+      height = 42;
+    }
+  }
+
+  PowerUp? _spawPowerUp(Platforms block) {
+    block.updateSprite(PlatformType.blockOff);
+    
+    if (block.powerup != null) {
+      var powerup = block.powerup!;
+      powerup.x = block.x;
+      powerup.y = block.y - block.height;
+    }
+
+    return block.powerup;
+  } 
+
   void jump([bool enemy = false]) {
     if (enemy || (keys.up && grounded)) {
-      velocity.y = -6.0;
+      velocity.y = -6.5;
       grounded = false;
+      status = Status.jumping;
     }
   }
   
@@ -120,43 +151,45 @@ class Player extends HitBox {
 
   void fire() {
     if (power) {
-      var bullet = Bullet(
+      status = Status.firing;
+      bullets.add(Bullet(
         dir: dir,
         x: x,
         y: y,
-      );
-      bullets.add(bullet);
-    }
+      ));
+    } 
   }
 
-  void damage([bool full = false]) {
-    if (full) {
-      life = 0;
-    } else {
-      life -= 5;
-    }
+  void damage() {
+    life -= 1;
+    _updateSize();
   }
 
-  void checkColisionPlatforms(List<Platforms> platforms) {
+  void checkColisionPlatforms(List<Platforms> platforms, {
+    void Function(PowerUp powerup)? onPowerUp,
+  }) {
     for (var platform in platforms) {
       if (collideWith(platform)) {
         var colision = collideWithSide(platform);
-
         if (colision.left || colision.right) {
           velocity.x = 0;
           blocked = true;
-        }
-
-        if (colision.top || colision.bottom) {
+        } else
+        if (colision.top) {
           velocity.y = 0;
-          
-          if (colision.top) {
-            grounded = true;
-          } else
-          if (colision.bottom && platform.type == PlatformType.wall) {
+          grounded = true;
+        } else
+        if (colision.bottom) {
+          velocity.y = 0;
+
+          if (platform.type == PlatformType.wall) {
             platform.visible = false;
-          }
-        }
+          } else
+          if (platform.type == PlatformType.question && onPowerUp != null) {
+            var powerup = _spawPowerUp(platform);
+            if (powerup != null) onPowerUp(powerup);
+          } 
+        } 
       }
     }
   }
@@ -166,18 +199,44 @@ class Player extends HitBox {
       var i = enemys.indexWhere((e) => e.collideWith(b));
       if (i > -1) {
         enemys[i].damage(power);
-        //enemys[i].damage();
         b.visible = false;
       }
     }
   }
 
-  void checkColisionPowerUps(List<PowerUp> powerups) {
+  void checkColisionPowerUps(List<PowerUp> powerups, {
+    void Function(PowerUp powerup)? onPowerUp 
+  }) {
     var i = powerups.indexWhere((p) => collideWith(p));
     if (i > -1) {
       powerups[i].visible = false;
-      power = true;
+      
+      if (powerups[i].type == PowerUpType.mushroom) {
+        life = 2;
+        _updateSize();
+      } else
+      if (powerups[i].type == PowerUpType.flower) {
+        life = 2;
+        power = true;
+        _updateSize();
+      } else
+      if (powerups[i].type == PowerUpType.coin) {
+        coins++;
+      } 
+
+      if (onPowerUp != null) {
+        onPowerUp(powerups[i]);
+      }
     }
+  }
+
+  factory Player.copy(Player player) {
+    return Player(
+      x: player.x,
+      y: player.y,
+      width: player.width,
+      height: player.height,
+    );
   }
 
 }

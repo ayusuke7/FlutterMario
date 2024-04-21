@@ -34,6 +34,10 @@ class HitBox {
 
   double get right => x + width;
 
+  void changeDir() {
+    dir = dir == Dir.left ? Dir.right : Dir.left;
+  }
+
   bool collideWith(HitBox other) {
     // Verifica se as posições futuras se sobrepõem
     return (

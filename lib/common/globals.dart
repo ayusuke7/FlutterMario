@@ -3,7 +3,7 @@ import 'dart:ui';
 abstract class Globals {
 
   /* gameboard */
-  static const screenSize = Size(720, 600);
+  static const screenSize = Size(800, 600);
   static const pixelSize = 48.0;
   static const gravity = 0.1;
 
@@ -42,9 +42,13 @@ abstract class Globals {
   static const pipeLine = 'assets/imgs/items/pipe_line.png';
   static const cloud = 'assets/imgs/items/cloud.png';
   static const block = 'assets/imgs/items/block2.png';
+  static const blockOff = 'assets/imgs/items/block_off.png';
   static const wall = 'assets/imgs/items/block.png';
   static const ground = 'assets/imgs/items/ground.png';
   static const coin = 'assets/imgs/items/coin.png';
   static const star = 'assets/imgs/items/star.png';
+  static const flower = 'assets/imgs/items/flower.png';
+  static const mushroom = 'assets/imgs/items/mushrom.png';
+  static const steal = 'assets/imgs/items/steal.png';
 
 }

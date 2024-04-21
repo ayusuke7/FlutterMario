@@ -2,19 +2,23 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_platform_game/enemy.dart';
-import 'package:flutter_platform_game/globals.dart';
-import 'package:flutter_platform_game/hitbox.dart';
-import 'package:flutter_platform_game/keys_map.dart';
-import 'package:flutter_platform_game/levels.dart';
-import 'package:flutter_platform_game/platforms.dart';
-import 'package:flutter_platform_game/player.dart';
-import 'package:flutter_platform_game/powerup.dart';
-import 'package:flutter_platform_game/components/progress_bar.dart';
+import 'package:flutter_platform_game/actors/enemy.dart';
+import 'package:flutter_platform_game/common/globals.dart';
+import 'package:flutter_platform_game/utils/hitbox.dart';
+import 'package:flutter_platform_game/utils/keys_map.dart';
+import 'package:flutter_platform_game/common/levels.dart';
+import 'package:flutter_platform_game/actors/platforms.dart';
+import 'package:flutter_platform_game/actors/player.dart';
+import 'package:flutter_platform_game/actors/powerup.dart';
 import 'package:flutter_platform_game/components/sprite_component.dart';
 
 class GameBoard extends StatefulWidget {
-  const GameBoard({super.key});
+  final LevelData level;
+  
+  const GameBoard({ 
+    super.key,
+    required this.level,
+  });
 
   @override
   State<GameBoard> createState() => _GameBoardState();
@@ -25,28 +29,51 @@ class _GameBoardState extends State<GameBoard> {
   final fps = const Duration(milliseconds: 10);
   final screenSize = Globals.screenSize;
   final pixelSize = Globals.pixelSize;
-  
-  Player player = Player(x: 100, y: 100);
-  LevelData level = LevelData.copy(levelOne);
+  final player = Player(x: 100, y: 100);
 
+  List<HitBox> objects = [];
   double scrollOffset = 0.0;
+  int seconds = 400;
+
   Timer? timer;
 
-  List<Platforms> get platforms => level.objects.whereType<Platforms>().toList();
-  List<PowerUp> get powerups => level.objects.whereType<PowerUp>().toList();
-  List<Enemy> get enemys => level.objects.whereType<Enemy>().toList();
+  double get maxScrollOffset => widget.level.scrollOffset.dx;
+  List<Platforms> get platforms => objects.whereType<Platforms>().toList();
+  List<PowerUp> get powerups => objects.whereType<PowerUp>().toList();
+  List<Enemy> get enemys => objects.whereType<Enemy>().toList();
+
+  void setObjects() {
+    objects = List.from(widget.level.objects);
+  }
+
+  void removeObjects() {
+    /* Remove Enemys / PowerUps / Platforms */
+    objects.removeWhere((o) {
+      if (o is Enemy) {
+        return o.die;
+      } else 
+      if (o is Platforms) {
+        return !o.visible;
+      } else 
+      if (o is PowerUp) {
+        return !o.visible;
+      }
+
+      return false;
+    });
+  }
 
   void moveCamera() {
     if (player.velocity.x == 0) {
-      if (!player.blocked && player.keys.right && scrollOffset < level.scrollOffset.dx) {
+      if (!player.blocked && player.keys.right && scrollOffset < maxScrollOffset) {
         scrollOffset += player.speed;
-        for (var o in level.objects) { 
+        for (var o in objects) { 
           o.x -= player.speed;
         }
       } else 
       if (!player.blocked && player.keys.left && scrollOffset > 0){
         scrollOffset -= player.speed;
-        for (var o in level.objects) { 
+        for (var o in objects) { 
           o.x += player.speed;
         }
       } else {
@@ -55,56 +82,73 @@ class _GameBoardState extends State<GameBoard> {
     }
   }
 
+  void updateTime(int time){
+    if (time % 100 == 0) {
+      seconds--;
+    }
+  }
+
   void update() {
     timer = Timer.periodic(fps, (t) {
 
-      if (player.die) { t.cancel(); }
-
       /* update three widgets */
-      setState(() {
-        
-        /* follow player */
+      setState(() { 
+
+        updateTime(t.tick);
         moveCamera();
 
         /* Player */
-        player.update(t.tick, screenSize, scrollOffset, level.scrollOffset.dx);
-        player.checkColisionPlatforms(platforms);
+        player.update(t.tick, screenSize, scrollOffset, maxScrollOffset);
         player.checkColisionBulletEnemy(enemys);
-        player.checkColisionPowerUps(powerups);
+        player.checkColisionPowerUps(powerups, 
+          onPowerUp: (power){
+            if (power.type == PowerUpType.steal) {
+              t.cancel();
+              exit();
+            }
+          }
+        );
+        player.checkColisionPlatforms(platforms,
+          onPowerUp: (power){
+            objects.add(power);
+          });
 
         /* Enemys */
-        for (var enemy in enemys) {      
-          enemy.update(t.tick, level.size);
+        for (var enemy in enemys) {
+          enemy.update(t.tick, widget.level.size);
           enemy.checkColisionWithPlayer(player);
           enemy.checkColisionWithPlatforms(platforms);
         }
 
-        /* Remove Enemys / PowerUps / Platforms */
-        level.objects.removeWhere((o) {
-          if (o is Enemy) {
-            return o.die;
-          } else if (o is Platforms) {
-            return !o.visible;
-          } else if (o is PowerUp) {
-            return !o.visible;
-          }
-
-          return false;
-        });
+        /* PowerUps */
+        for (var power in powerups) {
+          power.update(t.tick);
+          power.checkColisionWithPlatforms(platforms);
+        }
+        
+        removeObjects();
         
       });
+
+      /* check player die */
+      if (player.die) {
+        t.cancel(); 
+        exit();
+      }
+
     });
   }
 
-  void reset() {
-    scrollOffset = 0.0;
-    player = Player(x: 100, y: 100);
-    level = LevelData.copy(levelOne);
+  void exit() async {
+    Timer(const Duration(seconds: 1), () { 
+      Navigator.pop(context, player.die);
+    });
   }
 
   @override
   void initState() {
     super.initState();
+    setObjects();
     update();
   }
 
@@ -116,7 +160,6 @@ class _GameBoardState extends State<GameBoard> {
   
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: Focus(
@@ -126,52 +169,73 @@ class _GameBoardState extends State<GameBoard> {
           child: Container(
             width: screenSize.width,
             height: screenSize.height,
-            color: level.backgroundColor,
+            color: widget.level.backgroundColor,
             child: Stack(
               children: [
 
+                /* HUD */
                 Positioned(
-                  top: 10,
-                  left: 10,
-                  child: ProgressBar(
-                    label: "Player",
-                    percentage: (player.life * 10) / 100,
+                  child: Container(
+                    padding: const EdgeInsets.all(10.0),
+                    width: screenSize.width,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        hudText("MARIO\n00000"),
+                        hudText("COIN x ${"${player.coins}".padLeft(3, "0")}"),
+                        hudText("WORLD\n1 - 1"),
+                        hudText("TIME\n$seconds"),
+                      ]
+                    ),
                   )
                 ),
 
-                /* Objects */
-                for (var obj in level.objects)
-                  AnimatedPositioned(
-                    top: obj.top,
-                    left: obj.left,
-                    duration: fps,
-                    child: SpriteComponent(
-                      debug: true,
-                      asset: obj.sprite,
-                      flipX: obj.dir == Dir.right,
-                      repeat: ImageRepeat.repeat,
-                      imgSize: Size(obj.width, obj.height),
-                    )
-                  ),
-                
                 /* Player */
                 AnimatedPositioned(
                   duration: fps,
                   top: player.top,
                   left: player.left,
                   child: SpriteComponent(
-                    debug: true,
                     fit: BoxFit.fill,
                     asset: player.sprite,
                     flipX: player.dir == Dir.left,
                     imgSize: Size(player.width, player.height),
                   )
                 ),
+
+                /* Objects */
+                for (var obj in [
+                  ...objects,
+                  ...player.bullets
+                ])
+                  AnimatedPositioned(
+                    top: obj.top,
+                    left: obj.left,
+                    duration: fps,
+                    child: SpriteComponent(
+                      asset: obj.sprite,
+                      flipX: obj.dir == Dir.left,
+                      repeat: ImageRepeat.repeat,
+                      imgSize: Size(obj.width, obj.height),
+                    )
+                  ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget hudText(String text) {
+    return Text(text, 
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 22,
+        fontWeight: FontWeight.bold,
+        height: 1.0
+      )
     );
   }
 
@@ -189,6 +253,9 @@ class _GameBoardState extends State<GameBoard> {
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
       player.keys.right = pressed;
       player.dir = Dir.right;
+    } else
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      player.keys.down = pressed;
     } else
     if (event.logicalKey == LogicalKeyboardKey.space) {
       if (pressed) player.fire();
